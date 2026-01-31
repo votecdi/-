@@ -1,174 +1,298 @@
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-const file = document.getElementById("file");
+const fileInput = document.getElementById("file");
 const zoomEl = document.getElementById("zoom");
 const zoomText = document.getElementById("zoomText");
-const download = document.getElementById("download");
-const reset = document.getElementById("reset");
-const fit = document.getElementById("fit");
+const qualityEl = document.getElementById("quality");
+const qText = document.getElementById("qText");
 
+const btnDownload = document.getElementById("download");
+const btnShare = document.getElementById("share");
+const btnReset = document.getElementById("reset");
+const btnFit = document.getElementById("fit");
+const toastEl = document.getElementById("toast");
+
+// ===== State =====
 let currentFrame = "frame1.png";
 
 let userImg = null;
 let frameImg = new Image();
 
-let zoom = 1, x = 0, y = 0;
+let zoom = 1;
+let offsetX = 0;
+let offsetY = 0;
 
-let drag = false, lx = 0, ly = 0, pid = null;
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+let activePointerId = null;
 
-canvas.style.touchAction="none";
+canvas.style.touchAction = "none";
 
-frameImg.src=currentFrame;
-frameImg.onload=()=>draw();
-
-/* BG Remove */
-let segment = new SelfieSegmentation({
-locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`
-});
-
-segment.setOptions({modelSelection:1,selfieMode:true});
-
-/* Upload + Remove BG */
-file.addEventListener("change",e=>{
-const f=e.target.files[0];
-if(!f) return;
-
-const img=new Image();
-img.src=URL.createObjectURL(f);
-
-img.onload=async()=>{
-
-await segment.send({image:img});
-
-segment.onResults(r=>{
-
-const c=document.createElement("canvas");
-c.width=img.width;
-c.height=img.height;
-
-const cx=c.getContext("2d");
-
-cx.drawImage(img,0,0);
-cx.globalCompositeOperation="destination-in";
-cx.drawImage(r.segmentationMask,0,0,c.width,c.height);
-
-const out=new Image();
-out.onload=()=>{
-userImg=out;
-resetAll();
-};
-out.src=c.toDataURL("image/png");
-
-});
-};
-});
-
-/* Frame Switch */
-document.querySelectorAll(".frame").forEach(b=>{
-b.onclick=()=>{
-
-document.querySelectorAll(".frame")
-.forEach(x=>x.classList.remove("active"));
-
-b.classList.add("active");
-
-currentFrame=b.dataset.f;
-frameImg.src=currentFrame;
-};
-});
-
-/* Zoom */
-zoomEl.oninput=()=>{
-zoom=+zoomEl.value;
-zoomText.textContent=zoom.toFixed(2)+"x";
-draw();
-};
-
-reset.onclick=resetAll;
-fit.onclick=()=>{x=0;y=0;draw();};
-
-/* Download */
-download.onclick=()=>{
-if(!userImg){alert("Upload photo first");return;}
-
-draw();
-
-const a=document.createElement("a");
-a.download="dp.png";
-a.href=canvas.toDataURL("image/png");
-a.click();
-};
-
-/* Draw */
-function draw(){
-
-ctx.clearRect(0,0,canvas.width,canvas.height);
-
-ctx.fillStyle="#000";
-ctx.fillRect(0,0,canvas.width,canvas.height);
-
-if(userImg){
-
-const cs=Math.max(
-canvas.width/userImg.width,
-canvas.height/userImg.height
-)*zoom;
-
-const w=userImg.width*cs;
-const h=userImg.height*cs;
-
-ctx.drawImage(
-userImg,
-(canvas.width-w)/2+x,
-(canvas.height-h)/2+y,
-w,h
-);
+// ===== Toast =====
+let toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.textContent = ""), 2200);
 }
 
-ctx.drawImage(frameImg,0,0,canvas.width,canvas.height);
+// ===== Frame load =====
+frameImg.src = currentFrame;
+frameImg.onload = () => draw();
+frameImg.onerror = () => toast("Frame লোড হয়নি (ফাইল নাম চেক করুন)");
+
+// ===== BG Remove (Free) =====
+let segmenter = new SelfieSegmentation({
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+});
+segmenter.setOptions({
+  modelSelection: 1, // better
+  selfieMode: true,
+});
+
+function clear() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function resetAll(){
-zoom=1;x=0;y=0;
-zoomEl.value=1;
-zoomText.textContent="1.00x";
-draw();
+function drawBackground(targetCtx, W, H) {
+  targetCtx.fillStyle = "#000";
+  targetCtx.fillRect(0, 0, W, H);
 }
 
-/* Smooth Drag */
-function p(e){
-const r=canvas.getBoundingClientRect();
-return{
-x:(e.clientX-r.left)*(canvas.width/r.width),
-y:(e.clientY-r.top)*(canvas.height/r.height)
-};
+// Frame as BACKGROUND, user on TOP (আপনার চাওয়া অনুযায়ী)
+function drawFrame(targetCtx, W, H) {
+  if (!frameImg.complete) return;
+  targetCtx.drawImage(frameImg, 0, 0, W, H);
 }
 
-canvas.onpointerdown=e=>{
-if(!userImg)return;
+function drawUserImage(targetCtx, W, H, scaleFactor) {
+  if (!userImg) return;
 
-pid=e.pointerId;
-canvas.setPointerCapture(pid);
+  const iw = userImg.width,
+    ih = userImg.height;
 
-drag=true;
+  // cover-fit on base canvas, then scale by zoom
+  const coverScale = Math.max(W / iw, H / ih);
+  const scale = coverScale * zoom;
 
-const pt=p(e);
-lx=pt.x; ly=pt.y;
-};
+  const w = iw * scale;
+  const h = ih * scale;
 
-canvas.onpointermove=e=>{
-if(!drag||e.pointerId!==pid)return;
+  const x = (W - w) / 2 + offsetX * scaleFactor;
+  const y = (H - h) / 2 + offsetY * scaleFactor;
 
-const pt=p(e);
+  targetCtx.drawImage(userImg, x, y, w, h);
+}
 
-x+=pt.x-lx;
-y+=pt.y-ly;
+function renderToContext(targetCtx, outSize) {
+  const W = outSize;
+  const H = outSize;
 
-lx=pt.x; ly=pt.y;
+  // scaleFactor converts base offsets (1080 canvas px) to export canvas px
+  const scaleFactor = outSize / canvas.width;
 
-draw();
-};
+  targetCtx.clearRect(0, 0, W, H);
+  drawBackground(targetCtx, W, H);
+  drawFrame(targetCtx, W, H);
+  drawUserImage(targetCtx, W, H, scaleFactor);
+}
 
-canvas.onpointerup=()=>{drag=false;pid=null};
-canvas.onpointercancel=()=>{drag=false;pid=null};
+function draw() {
+  renderToContext(ctx, canvas.width);
+}
+
+function resetAll() {
+  zoom = 1;
+  offsetX = 0;
+  offsetY = 0;
+  zoomEl.value = String(zoom);
+  zoomText.textContent = `${zoom.toFixed(2)}x`;
+  draw();
+}
+
+function centerOnly() {
+  offsetX = 0;
+  offsetY = 0;
+  draw();
+}
+
+// ===== Zoom =====
+zoomEl.addEventListener("input", () => {
+  zoom = Number(zoomEl.value);
+  zoomText.textContent = `${zoom.toFixed(2)}x`;
+  draw();
+});
+
+// ===== Quality =====
+qualityEl.addEventListener("change", () => {
+  qText.textContent = qualityEl.value;
+});
+
+// ===== Upload + Remove BG =====
+fileInput.addEventListener("change", (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+
+  toast("Processing photo…");
+
+  const img = new Image();
+  img.onload = () => {
+    // IMPORTANT: onResults should be set ONCE, but safe to set here
+    segmenter.onResults((res) => {
+      const mask = res.segmentationMask;
+
+      const cut = document.createElement("canvas");
+      cut.width = img.width;
+      cut.height = img.height;
+      const cctx = cut.getContext("2d");
+
+      // draw original
+      cctx.drawImage(img, 0, 0);
+
+      // keep only person
+      cctx.globalCompositeOperation = "destination-in";
+      cctx.drawImage(mask, 0, 0, img.width, img.height);
+
+      const finalImg = new Image();
+      finalImg.onload = () => {
+        userImg = finalImg;
+        resetAll();
+        toast("✅ Photo loaded");
+      };
+      finalImg.src = cut.toDataURL("image/png");
+    });
+
+    segmenter.send({ image: img }).catch(() => toast("BG remove failed"));
+  };
+  img.src = URL.createObjectURL(f);
+});
+
+// ===== Frame Switch =====
+document.querySelectorAll(".frame").forEach((b) => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".frame").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+
+    currentFrame = b.dataset.f;
+    frameImg.src = currentFrame;
+    toast("Frame changed");
+  });
+});
+
+// ===== Buttons =====
+btnReset.addEventListener("click", resetAll);
+btnFit.addEventListener("click", centerOnly);
+
+// ===== Export helper =====
+function exportCanvasBlob(size) {
+  return new Promise((resolve, reject) => {
+    if (!userImg) return reject(new Error("No photo"));
+
+    const out = document.createElement("canvas");
+    out.width = size;
+    out.height = size;
+    const octx = out.getContext("2d");
+
+    renderToContext(octx, size);
+
+    out.toBlob((blob) => {
+      if (!blob) return reject(new Error("Blob failed"));
+      resolve(blob);
+    }, "image/png");
+  });
+}
+
+btnDownload.addEventListener("click", async () => {
+  try {
+    const size = Number(qualityEl.value || 1080);
+    const blob = await exportCanvasBlob(size);
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.download = `dp-${size}.png`;
+    a.href = url;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast("✅ Download started");
+  } catch {
+    toast("আগে ছবি আপলোড করুন");
+  }
+});
+
+// ===== Share =====
+btnShare.addEventListener("click", async () => {
+  try {
+    const size = Number(qualityEl.value || 1080);
+    const blob = await exportCanvasBlob(size);
+
+    const file = new File([blob], `dp-${size}.png`, { type: "image/png" });
+
+    // If device supports file sharing
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      await navigator.share({
+        title: "DP Maker",
+        text: "Here is my DP",
+        files: [file],
+      });
+      toast("✅ Shared");
+      return;
+    }
+
+    // Fallback: open image in new tab
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    toast("Share not supported—opened image");
+  } catch {
+    toast("আগে ছবি আপলোড করুন");
+  }
+});
+
+// ===== Ultra Smooth Drag (Pointer Events) =====
+function getCanvasPoint(ev) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
+  return { x, y };
+}
+
+canvas.addEventListener("pointerdown", (ev) => {
+  if (!userImg) return;
+
+  activePointerId = ev.pointerId;
+  canvas.setPointerCapture(activePointerId);
+
+  dragging = true;
+  const p = getCanvasPoint(ev);
+  lastX = p.x;
+  lastY = p.y;
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  if (!dragging || ev.pointerId !== activePointerId) return;
+
+  const p = getCanvasPoint(ev);
+  offsetX += (p.x - lastX);
+  offsetY += (p.y - lastY);
+  lastX = p.x;
+  lastY = p.y;
+  draw();
+});
+
+function endDrag(ev) {
+  if (ev.pointerId !== activePointerId) return;
+  dragging = false;
+  activePointerId = null;
+}
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+// ===== PWA Service Worker register =====
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
