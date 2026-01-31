@@ -1,18 +1,20 @@
-const CACHE = "dp-maker-v1";
-const ASSETS = [
+const CACHE = "dp-maker-v3";
+const CORE = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
   "./manifest.webmanifest",
-  "./frame1.png",
-  "./frame2.png"
+  "./frame1.png"
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => {})
-  );
+  event.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    try { await c.addAll(CORE); } catch {}
+    // frame2 optional
+    try { await c.add("./frame2.png"); } catch {}
+  })());
   self.skipWaiting();
 });
 
