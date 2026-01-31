@@ -120,3 +120,4 @@ window.addEventListener("mouseup", up);
 canvas.addEventListener("touchstart", down, {passive:false});
 canvas.addEventListener("touchmove", move, {passive:false});
 canvas.addEventListener("touchend", up);
+canvas.style.touchAction = "none";
