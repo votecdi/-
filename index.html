@@ -2,95 +2,91 @@
 <html lang="bn">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0a2a1c" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>No Boat No Vote | DP Maker</title>
 
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon-192.png" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0f5d25" />
 
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <main class="wrap">
     <header class="hero">
-      <h1 class="heroTitle">No Boat No Vote</h1>
-      <p class="heroSub">Make Your Profile Picture</p>
+      <h1 class="title">No Boat No Vote</h1>
+      <p class="subtitle">Make Your Profile Picture</p>
     </header>
 
-    <section class="stage card">
-      <div class="canvasWrap">
-        <canvas id="c" width="1080" height="1080" aria-label="DP maker canvas"></canvas>
-        <div id="toast" class="toast" aria-live="polite"></div>
+    <section class="card stage">
+      <div class="canvas-wrap">
+        <canvas id="c" width="1080" height="1080"></canvas>
       </div>
     </section>
 
-    <section class="panel card">
-      <div class="grid">
+    <section class="card panel">
+      <label class="upload-btn">
+        ছবি আপলোড করুন
+        <input id="file" type="file" accept="image/*" />
+      </label>
 
-        <label class="fileBtn">
-          <input id="file" type="file" accept="image/*" />
-          <span>ছবি আপলোড করুন</span>
-        </label>
-
-        <div class="box">
-          <div class="boxTitle">ফ্রেম নির্বাচন করুন</div>
-          <div id="frames" class="frames" role="list"></div>
-
-          <label class="miniUpload">
-            <input id="frameUpload" type="file" accept="image/png,image/webp,image/jpeg" />
-            <span>আরও ফ্রেম যোগ করুন</span>
-          </label>
-          <div class="miniHint">টিপ: ভালো ফলের জন্য PNG ব্যবহার করুন।</div>
+      <!-- Frame selector (2 frames) -->
+      <div class="box">
+        <div class="row-top">
+          <span class="lbl">ফ্রেম নির্বাচন করুন</span>
         </div>
-
-        <div class="box">
-          <div class="rowBetween">
-            <div class="boxTitle">এক্সপোর্ট কোয়ালিটি</div>
-            <div class="chip"><span id="qText">1080</span>px</div>
-          </div>
-          <select id="quality" class="select">
-            <option value="1080" selected>Normal (1080)</option>
-            <option value="1440">HD (1440)</option>
-            <option value="2048">Ultra (2048)</option>
-          </select>
-
-          <div class="rowBetween mt12">
-            <label class="boxTitle">জুম</label>
-            <div class="chip" id="zoomText">1.00x</div>
-          </div>
-          <input id="zoom" type="range" min="0.5" max="3" step="0.01" value="1" />
-          <div class="miniHint">টিপ: ছবির ওপর টাচ/মাউস ধরে ড্র্যাগ করলে পজিশন বদলাবে।</div>
+        <div class="frames">
+          <img src="frame1.png" class="frame active" data-f="frame1.png" alt="frame 1">
+          <img src="frame2.png" class="frame" data-f="frame2.png" alt="frame 2">
         </div>
-
-        <div class="row two mt6">
-          <button id="fit" class="btn" type="button">মাঝখানে</button>
-          <button id="install" class="btn ghost" type="button" style="display:none;">App Mode</button>
-        </div>
-
-        <div class="row two mt6">
-          <button id="download" class="btn primary" type="button">ছবি ডাউনলোড করুন</button>
-          <button id="share" class="btn share" type="button">শেয়ার করুন</button>
-        </div>
-
-        <div class="note">
-          ✅ ব্যাকগ্রাউন্ড রিমুভ <b>OFF</b> — শুধু ফ্রেমের transparent অংশে আপনার ছবি বসবে।
-        </div>
-
       </div>
+
+      <!-- Export quality -->
+      <div class="box">
+        <div class="row-top">
+          <span class="lbl">এক্সপোর্ট কোয়ালিটি</span>
+          <span id="qText" class="val">1080</span>
+        </div>
+        <select id="quality">
+          <option value="1080" selected>Normal (1080)</option>
+          <option value="2048">HD (2048)</option>
+          <option value="4096">Ultra (4096)</option>
+        </select>
+      </div>
+
+      <!-- Zoom -->
+      <div class="box">
+        <div class="row-top">
+          <span class="lbl">জুম</span>
+          <span id="zoomText" class="val">1.00x</span>
+        </div>
+        <input id="zoom" type="range" min="0.5" max="3" step="0.01" value="1" />
+      </div>
+
+      <div class="btn-row">
+        <button id="fit" type="button">মাঝখানে</button>
+        <button id="reset" type="button">রিসেট</button>
+      </div>
+
+      <div class="btn-row">
+        <button id="download" class="download" type="button">ছবি ডাউনলোড করুন</button>
+        <button id="share" class="share" type="button">শেয়ার করুন</button>
+      </div>
+
+      <p class="hint">টিপ: ছবির উপর টাচ/মাউস ধরে ড্র্যাগ করলে পজিশন বদলাবে।</p>
+      <p id="toast" class="toast" aria-live="polite"></p>
     </section>
 
-    <footer class="footer">
+    <footer class="site-footer">
       <div>© 2026 No Boat No Vote</div>
-      <div class="footerSub">রাজশাহী বিশ্ববিদ্যালয় ছাত্রলীগ</div>
+      <div class="org">রাজশাহী বিশ্ববিদ্যালয় ছাত্রলীগ</div>
     </footer>
   </main>
 
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
